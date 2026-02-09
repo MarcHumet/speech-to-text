@@ -1,0 +1,49 @@
+# Speech-to-Text Service Configuration
+
+# Service settings
+service:
+  # Language for transcription: 'en' (English), 'es' (Spanish), 'ca' (Catalan)
+  language: en
+  # Audio input device (use 'default' for system default)
+  audio_device: default
+
+# Input method configuration
+input:
+  # Method for triggering speech recognition (currently only 'hotkey' supported)
+  method: hotkey
+  # Hotkey combination to start/stop recording
+  # Examples: 'ctrl+shift+space', 'ctrl+alt+r', 'alt+space'
+  hotkey: ctrl+shift+space
+
+# Output method configuration
+output:
+  # Where to send transcribed text
+  # Options: 'keyboard' (type text), 'clipboard' (copy to clipboard), 'both'
+  method: keyboard
+
+# Model configuration
+model:
+  # STT model type: 'dummy' (for testing), 'whisper' (OpenAI Whisper)
+  type: dummy
+  # Model path or name
+  # For Whisper: 'tiny', 'base', 'small', 'medium', 'large'
+  # For custom models: path to model directory
+  path: base
+
+# Audio capture settings
+audio:
+  # Sample rate in Hz (16000 is standard for most STT models)
+  sample_rate: 16000
+  # Number of audio channels (1 for mono, 2 for stereo)
+  channels: 1
+  # Maximum recording duration in seconds
+  max_duration: 30
+  # Audio format (int16 or float32)
+  format: int16
+
+# Logging configuration
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: INFO
+  # Log file path (null for no file logging)
+  file: null
