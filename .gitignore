@@ -19,7 +19,9 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
+pyproject.toml
+.python-version
+uv.lock
 # Virtual environments
 venv/
 env/

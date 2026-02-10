@@ -54,6 +54,21 @@ sudo apt install portaudio19-dev python3-pyaudio
 sudo apt install ffmpeg
 ```
 
+### Install uv (if not already installed)
+
+uv is a fast Python package installer and resolver. If you don't have uv installed:
+
+```bash
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or on macOS with Homebrew
+brew install uv
+
+# Or on Windows with PowerShell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
 ### Install the Service
 
 ```bash
@@ -61,15 +76,15 @@ sudo apt install ffmpeg
 git clone https://github.com/MarcHumet/speech-to-text.git
 cd speech-to-text
 
-# Create virtual environment (recommended)
-python3 -m venv venv
-source venv/bin/activate
+# Create virtual environment with uv (recommended)
+uv venv
+source .venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies with uv
+uv pip install -r requirements.txt
 
 # Install the service
-pip install -e .
+uv pip install -e .
 ```
 
 ### Install STT Model (Optional)
@@ -77,7 +92,7 @@ pip install -e .
 For production use, install OpenAI Whisper:
 
 ```bash
-pip install openai-whisper
+uv pip install openai-whisper
 ```
 
 Or use another STT model of your choice and implement the interface in `stt_service/models/`.
@@ -88,7 +103,7 @@ Or use another STT model of your choice and implement the interface in `stt_serv
 
 ```bash
 # Create example configuration
-python cli.py config --create -o config.yaml
+uv run  cli.py config --create -o config.yaml
 
 # Edit the configuration
 nano config.yaml

@@ -127,6 +127,8 @@ class Config:
         Args:
             path: Path to save configuration file
         """
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        dir_path = os.path.dirname(path)
+        if dir_path:  # Only create directory if path is not empty
+            os.makedirs(dir_path, exist_ok=True)
         with open(path, 'w') as f:
             yaml.dump(self.config, f, default_flow_style=False)
