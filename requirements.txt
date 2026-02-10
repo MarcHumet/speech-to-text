@@ -1,0 +1,18 @@
+# Core dependencies
+PyYAML>=6.0
+numpy>=1.21.0
+
+# Audio capture
+sounddevice>=0.4.6
+
+# Input handling - keyboard/hotkey detection
+pynput>=1.7.6
+
+# Output handling - clipboard
+pyperclip>=1.8.2
+
+# Optional: OpenAI Whisper for STT (can be installed separately)
+# openai-whisper>=20230124
+
+# Optional: Alternative keyboard library
+# keyboard>=0.13.5
