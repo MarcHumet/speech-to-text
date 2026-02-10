@@ -38,7 +38,109 @@ stt_service/
 
 ## Installation
 
-### Prerequisites
+You can install this service in two ways: **containerized** (recommended) or **native**.
+
+### Option 1: Containerized Installation (Recommended)
+
+We use **Podman** instead of Docker for better security, rootless operation, and improved resource management.
+
+#### Quick Container Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/MarcHumet/speech-to-text.git
+cd speech-to-text
+
+# Run the automated setup script
+chmod +x podman-setup.sh
+./podman-setup.sh
+
+# Start the containerized service
+podman-compose up -d
+```
+
+The setup script will:
+- Install Podman and NVIDIA Container Toolkit
+- Configure rootless operation and GPU support
+- Set up audio and X11 permissions
+- Create systemd service for auto-start
+
+#### Manual Container Setup
+
+If you prefer manual setup or need to customize:
+
+```bash
+# 1. Install Podman (Ubuntu/Debian)
+sudo apt update
+sudo apt install podman podman-compose
+
+# 2. For GPU support, install NVIDIA Container Toolkit
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt update
+sudo apt install nvidia-container-toolkit
+
+# 3. Configure rootless Podman
+podman system connection default --remote unix:///run/user/$UID/podman/podman.sock
+
+# 4. Build and run containers
+podman-compose up --build -d
+```
+
+#### Container Features
+
+- 🐧 **Rootless**: Runs without root privileges for better security
+- 🚀 **GPU-accelerated**: NVIDIA CUDA support for faster transcription
+- 🗃️ **Database**: PostgreSQL for analytics and session tracking
+- 🔄 **Caching**: Redis for improved performance
+- 📈 **Monitoring**: Health checks and resource monitoring
+- 🔧 **Auto-start**: Systemd service integration
+
+#### Container Architecture
+
+```
+┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+│   STT Service   │◄──│   PostgreSQL    │◄──│     Redis       │
+│   (Main App)    │   │   (Analytics)   │   │   (Sessions)    │
+│                 │   │                 │   │                 │
+│ • CUDA Support  │   │ • Persistent    │   │ • Memory Cache  │
+│ • Audio I/O     │   │   Storage       │   │ • Fast Access  │
+│ • X11 GUI       │   │ • Health Check  │   │ • Health Check  │
+└─────────────────┘   └─────────────────┘   └─────────────────┘
+```
+
+#### Container Usage
+
+```bash
+# Start all services
+podman-compose up -d
+
+# View logs
+podman-compose logs -f stt-service
+
+# Stop services
+podman-compose down
+
+# Check status
+podman-compose ps
+
+# Access database
+podman exec -it stt-postgres psql -U stt_user -d stt_db
+
+# Monitor Redis
+podman exec -it stt-redis redis-cli info
+
+# Rebuild after changes
+podman-compose up --build -d
+```
+
+### Option 2: Native Installation
+
+For development or systems without container support:
+
+#### Prerequisites
 
 #### System Dependencies (Ubuntu/Debian)
 
@@ -114,10 +216,10 @@ brew install uv
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-### Install the Service
+### Install the Service (Native)
 
 ```bash
-# Clone the repository
+# Clone the repository (if not already done)
 git clone https://github.com/MarcHumet/speech-to-text.git
 cd speech-to-text
 
@@ -184,6 +286,33 @@ If you have an NVIDIA GPU with CUDA support:
 - 🎯 **Better accuracy** with faster processing
 
 ## Quick Start
+
+### Containerized Usage (Recommended)
+
+```bash
+# 1. Quick setup (one command)
+./podman-setup.sh
+
+# 2. Start services
+podman-compose up -d
+
+# 3. Use the service
+# Press Ctrl+Shift+Space to start recording
+# Speak your text
+# Press Ctrl+Shift+Space again to stop and transcribe
+
+# 4. Monitor logs (optional)
+podman-compose logs -f stt-service
+```
+
+**That's it!** The containerized setup includes:
+- Automatic GPU detection and configuration
+- Database and caching setup
+- Audio and GUI permissions
+- Health monitoring
+- Auto-restart on system boot
+
+### Native Usage
 
 ### 1. Create Configuration
 
@@ -258,6 +387,19 @@ uv run python cli.py test clipboard
 
 ### 3. Run the Service
 
+**Containerized:**
+```bash
+# Start all services (database, cache, STT service)
+podman-compose up -d
+
+# View real-time logs
+podman-compose logs -f
+
+# Stop services
+podman-compose down
+```
+
+**Native:**
 ```bash
 # Run with default configuration
 python cli.py run
@@ -280,9 +422,134 @@ python cli.py run -l es -o clipboard
 4. Press the hotkey again to stop recording
 5. The transcribed text will be typed or copied to clipboard
 
+## Container Management
+
+### Service Management
+
+```bash
+# Start services in background
+podman-compose up -d
+
+# Start with rebuild (after code changes)
+podman-compose up --build -d
+
+# View service status
+podman-compose ps
+
+# View logs for all services
+podman-compose logs
+
+# Follow logs for specific service
+podman-compose logs -f stt-service
+
+# Stop all services
+podman-compose down
+
+# Stop and remove volumes (reset database)
+podman-compose down -v
+```
+
+### Database Operations
+
+```bash
+# Access PostgreSQL database
+podman exec -it stt-postgres psql -U stt_user -d stt_db
+
+# Backup database
+podman exec stt-postgres pg_dump -U stt_user stt_db > backup.sql
+
+# Restore database
+podman exec -i stt-postgres psql -U stt_user -d stt_db < backup.sql
+
+# View database logs
+podman logs stt-postgres
+```
+
+### Cache Management
+
+```bash
+# Access Redis CLI
+podman exec -it stt-redis redis-cli
+
+# Clear cache
+podman exec stt-redis redis-cli FLUSHALL
+
+# View cache statistics
+podman exec stt-redis redis-cli INFO memory
+
+# Monitor Redis activity
+podman exec stt-redis redis-cli MONITOR
+```
+
+### Monitoring and Health Checks
+
+```bash
+# Check container health
+podman-compose ps
+podman inspect --format='{{.State.Health.Status}}' stt-service
+
+# View resource usage
+podman stats
+
+# Check GPU usage (if available)
+podman exec stt-service nvidia-smi
+```
+
+### Troubleshooting Containers
+
+```bash
+# Container won't start - check logs
+podman-compose logs stt-service
+
+# Audio not working - check permissions
+podman exec stt-service ls -la /dev/snd/
+
+# GPU not detected - verify NVIDIA runtime
+podman exec stt-service nvidia-smi
+
+# Database connection issues
+podman exec stt-postgres pg_isready -U stt_user
+
+# Reset everything (nuclear option)
+podman-compose down -v
+podman system prune -a
+podman-compose up --build -d
+```
+
 ## Configuration
 
-Configuration is managed via YAML files. See `config.yaml.example` for all options.
+Configuration is managed via YAML files. For containerized deployments, configuration is handled through environment variables and docker-compose.
+
+### Container Configuration
+
+The containerized setup uses environment variables in [docker-compose.yml](docker-compose.yml):
+
+```yaml
+services:
+  stt-service:
+    environment:
+      - STT_LANGUAGE=en
+      - STT_MODEL_TYPE=faster-whisper
+      - STT_MODEL_SIZE=base
+      - STT_OUTPUT_METHOD=keyboard
+      - STT_HOTKEY=ctrl+shift+space
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+```
+
+Modify these values in [docker-compose.yml](docker-compose.yml) and restart:
+
+```bash
+# Edit configuration
+nano docker-compose.yml
+
+# Apply changes
+podman-compose up -d
+```
+
+### Native Configuration
+
+For native installations, configuration uses YAML files. See `config.yaml.example` for all options.
 
 ### Key Settings
 
@@ -353,7 +620,25 @@ python cli.py run -c my-config.yaml
 
 ### Running as a Service
 
-To run as a systemd service (autostart on boot):
+#### Containerized (Auto-configured)
+
+The Podman setup script automatically creates systemd services:
+
+```bash
+# Check service status
+systemctl --user status stt-containers
+
+# Start/stop services
+systemctl --user start stt-containers
+systemctl --user stop stt-containers
+
+# Enable auto-start on boot
+systemctl --user enable stt-containers
+```
+
+#### Native Systemd Service
+
+To run the native installation as a systemd service (autostart on boot):
 
 ```bash
 # Create systemd service file
@@ -389,6 +674,26 @@ sudo systemctl status stt-service
 
 ## Development
 
+### Container Development
+
+For development with containers:
+
+```bash
+# Development mode with live reload
+podman-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+# Build only the main service
+podman-compose build stt-service
+
+# Run tests inside container
+podman-compose exec stt-service python -m pytest
+
+# Access development shell
+podman-compose exec stt-service bash
+```
+
+### Native Development
+
 ### Project Structure
 
 ```
@@ -406,6 +711,9 @@ speech-to-text/
 │   │   └── keyboard.py       # Keyboard & clipboard
 │   ├── models/               # STT model implementations
 │   └── service.py            # Main service
+├── Dockerfile                # Container image definition
+├── docker-compose.yml        # Multi-service container setup
+├── podman-setup.sh          # Automated Podman installation
 ├── cli.py                    # Command-line interface
 ├── config.yaml.example       # Example configuration
 ├── requirements.txt          # Python dependencies
@@ -440,6 +748,16 @@ class MyCustomEngine(STTEngine):
 
 ### Testing
 
+**Container Testing:**
+```bash
+# Run tests in container
+podman-compose exec stt-service python cli.py test
+
+# Run specific test
+podman-compose exec stt-service python cli.py test audio
+```
+
+**Native Testing:**
 ```bash
 # Test all components
 python cli.py test
@@ -450,7 +768,61 @@ python cli.py test -v
 
 ## Troubleshooting
 
-### System Dependencies
+### Container Issues
+
+**Container won't start:**
+```bash
+# Check logs for errors
+podman-compose logs stt-service
+
+# Verify system requirements
+./podman-setup.sh --check
+
+# Reset containers
+podman-compose down -v
+podman system prune -a
+podman-compose up --build -d
+```
+
+**Audio not working in container:**
+```bash
+# Verify audio device access
+podman exec stt-service ls -la /dev/snd/
+
+# Check PulseAudio socket
+podman exec stt-service ls -la /run/user/$(id -u)/pulse/
+
+# Restart with audio debug
+podman-compose logs stt-service | grep -i audio
+```
+
+**GPU not detected:**
+```bash
+# Verify NVIDIA runtime
+podman exec stt-service nvidia-smi
+
+# Check container GPU access
+podman exec stt-service nvidia-container-cli info
+
+# Recreate with GPU support
+podman-compose down
+podman-compose up --build -d
+```
+
+**Database connection issues:**
+```bash
+# Check PostgreSQL status
+podman exec stt-postgres pg_isready -U stt_user
+
+# View database logs
+podman logs stt-postgres
+
+# Reset database
+podman-compose down -v
+podman-compose up -d postgres
+```
+
+### Native System Dependencies
 
 **PortAudio Issues:**
 ```bash
