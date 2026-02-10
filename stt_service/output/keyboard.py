@@ -1,11 +1,11 @@
 """Keyboard output handler for typing text."""
 
-import logging
 import time
 from typing import Optional
 from .base import OutputHandler
+from ..core.logger import get_logger, log_operation_start, log_operation_success, log_malfunction, log_performance
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class KeyboardHandler(OutputHandler):

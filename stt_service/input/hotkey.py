@@ -1,10 +1,10 @@
 """Hotkey input handler for triggering speech recognition."""
 
-import logging
 from typing import Callable, Optional
 from .base import InputHandler
+from ..core.logger import get_logger, log_operation_start, log_operation_success, log_malfunction
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class HotkeyHandler(InputHandler):

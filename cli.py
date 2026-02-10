@@ -3,13 +3,14 @@
 
 import argparse
 import sys
-import logging
 from pathlib import Path
+import time
 
 from stt_service.core.config import Config
 from stt_service.service import STTService
+from stt_service.core.logger import setup_logging, get_logger, log_operation_start, log_operation_success, log_operation_error
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def main():
@@ -91,10 +92,13 @@ Examples:
     args = parser.parse_args()
     
     # Set up logging
+    # Setup loguru logging
+    setup_logging()
+    
     if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
+        logger.info("Verbose logging enabled")
     else:
-        logging.basicConfig(level=logging.INFO)
+        logger.info("Standard logging enabled")
     
     # Execute command
     if args.command == 'run':

@@ -1,12 +1,14 @@
 """Audio capture module for recording microphone input."""
 
-import logging
 import numpy as np
 from typing import Optional, Callable
 import threading
 import queue
+import time
 
-logger = logging.getLogger(__name__)
+from .logger import get_logger, log_malfunction, log_audio_event, log_performance
+
+logger = get_logger(__name__)
 
 
 class AudioCapture:
@@ -39,23 +41,37 @@ class AudioCapture:
             import sounddevice as sd
             self.sd = sd
             self.available = True
-        except ImportError:
-            logger.warning("sounddevice not available, audio capture disabled")
+            log_audio_event("Audio capture initialized", {
+                "device": device_id, 
+                "sample_rate": sample_rate, 
+                "channels": channels,
+                "buffer_size": buffer_size,
+                "max_duration": max_duration
+            })
+        except ImportError as e:
+            log_malfunction("AudioCapture", f"sounddevice not available: {e}", "ERROR")
+            logger.error("🚨 Audio capture disabled - sounddevice not installed")
             self.available = False
     
     def start_recording(self) -> None:
         """Start recording audio."""
         if not self.available:
+            log_malfunction("AudioCapture", "Attempted to record without available audio system", "ERROR")
             raise RuntimeError("Audio capture not available - install sounddevice")
         
         if self._recording:
-            logger.warning("Already recording")
+            log_malfunction("AudioCapture", "Attempted to start recording while already recording", "WARNING")
             return
         
         self._recording = True
         self._audio_data = []
+        self._start_time = time.time()
         
-        logger.info(f"Starting audio recording (max {self.max_duration}s)")
+        log_audio_event("Recording started", {
+            "max_duration": self.max_duration,
+            "sample_rate": self.sample_rate,
+            "device": self.device_id
+        })
         
         # Start recording in separate thread
         self._record_thread = threading.Thread(target=self._record)
@@ -68,7 +84,7 @@ class AudioCapture:
             NumPy array containing audio samples
         """
         if not self._recording:
-            logger.warning("Not currently recording")
+            log_malfunction("AudioCapture", "Attempted to stop recording when not recording", "WARNING")
             return np.array([], dtype=np.float32)
         
         self._recording = False
@@ -76,11 +92,24 @@ class AudioCapture:
         if self._record_thread:
             self._record_thread.join(timeout=1.0)
         
-        logger.info(f"Stopped recording, captured {len(self._audio_data)} samples")
+        # Calculate metrics
+        duration = time.time() - self._start_time if hasattr(self, '_start_time') else 0
+        samples_count = len(self._audio_data)
+        
+        log_audio_event("Recording stopped", {
+            "duration": f"{duration:.2f}s",
+            "data_chunks": samples_count,
+            "audio_quality": "good" if samples_count > 10 else "poor"
+        })
+        
+        log_performance("Audio recording", duration, threshold=self.max_duration * 0.8)
         
         if self._audio_data:
-            return np.concatenate(self._audio_data)
+            audio_array = np.concatenate(self._audio_data)
+            logger.info(f"✅ Audio capture successful: {len(audio_array)} samples in {duration:.2f}s")
+            return audio_array
         else:
+            log_malfunction("AudioCapture", "No audio data captured during session", "WARNING")
             return np.array([], dtype=np.float32)
     
     def _record(self) -> None:

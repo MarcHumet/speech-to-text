@@ -1,11 +1,14 @@
 """STT Engine interface for model abstraction."""
 
-import logging
 from abc import ABC, abstractmethod
 from typing import Optional
 import numpy as np
+import time
+import random
 
-logger = logging.getLogger(__name__)
+from .logger import get_logger, log_operation_start, log_operation_success, log_stt_event, log_malfunction
+
+logger = get_logger(__name__)
 
 
 class STTEngine(ABC):
@@ -48,7 +51,9 @@ class DummyEngine(STTEngine):
     
     def __init__(self):
         self.ready = False
-        logger.info("Initialized Dummy STT Engine")
+        self.transcription_count = 0
+        log_operation_start("DummyEngine Init")
+        logger.info("🤖 Dummy STT Engine initialized for testing")
     
     def load_model(self, model_path: str) -> None:
         """Simulate model loading.
@@ -56,8 +61,17 @@ class DummyEngine(STTEngine):
         Args:
             model_path: Path to model (ignored for dummy)
         """
-        logger.info(f"Dummy engine: pretending to load model from {model_path}")
+        start_time = time.time()
+        log_operation_start("Load Dummy Model", model_path=model_path)
+        
+        # Simulate loading time
+        time.sleep(0.1)
+        
         self.ready = True
+        duration = time.time() - start_time
+        
+        logger.info(f"📁 Dummy model 'loaded' from {model_path}")
+        log_operation_success("Load Dummy Model", duration=duration, model_path=model_path)
     
     def transcribe(self, audio: np.ndarray, language: Optional[str] = None) -> str:
         """Return dummy transcription.
@@ -69,19 +83,49 @@ class DummyEngine(STTEngine):
         Returns:
             Dummy transcription text
         """
+        start_time = time.time()
+        self.transcription_count += 1
+        
         if not self.ready:
+            log_malfunction("DummyEngine", "Transcription attempted before model loading", "ERROR")
             raise RuntimeError("Model not loaded")
         
-        duration = len(audio) / 16000.0  # Assume 16kHz
+        # Analyze audio for realistic dummy response
+        audio_length = len(audio) if audio is not None else 0
+        duration = audio_length / 16000.0  # Assume 16kHz
         lang_text = language or 'unknown'
         
-        # Return a dummy transcription based on audio length
+        log_audio_event("Transcription request", {
+            "audio_samples": audio_length,
+            "duration": f"{duration:.2f}s",
+            "language": lang_text,
+            "attempt": self.transcription_count
+        })
+        
+        # Generate realistic dummy response based on audio length
         if duration < 1.0:
-            return f"[Dummy {lang_text}]: Short utterance"
+            result = f"[Dummy {lang_text}]: Short utterance"
         elif duration < 3.0:
-            return f"[Dummy {lang_text}]: Medium length speech detected"
+            result = f"[Dummy {lang_text}]: Medium length speech detected"
         else:
-            return f"[Dummy {lang_text}]: Long speech detected, duration: {duration:.1f}s"
+            result = f"[Dummy {lang_text}]: Long speech detected, duration: {duration:.1f}s"
+        
+        # Simulate processing time
+        processing_time = min(0.5, duration * 0.2)  # Realistic processing time
+        time.sleep(processing_time)
+        
+        total_time = time.time() - start_time
+        confidence = random.uniform(0.8, 0.95)  # Fake confidence score
+        
+        log_stt_event("Transcription completed", 
+                      text=result, 
+                      confidence=confidence,
+                      processing_time=total_time,
+                      audio_duration=duration)
+        
+        log_performance("STT Transcription", total_time, threshold=2.0)
+        
+        return result
     
     def is_ready(self) -> bool:
         """Check if ready.

@@ -1,16 +1,17 @@
 """Main STT service orchestrator."""
 
-import logging
 import time
 from typing import Optional
+import threading
 
 from .core.config import Config
 from .core.audio_capture import AudioCapture
 from .core.engine import create_engine, STTEngine
 from .input.hotkey import create_hotkey_handler
 from .output.keyboard import create_output_handler
+from .core.logger import get_logger, log_operation_start, log_operation_success, log_operation_error, log_malfunction, log_stt_event
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class STTService:
@@ -23,9 +24,11 @@ class STTService:
             config: Configuration object. If None, uses defaults.
         """
         self.config = config or Config()
-        self._setup_logging()
+        self.service_start_time = time.time()
         
-        logger.info("Initializing STT Service...")
+        log_operation_start("STT Service Initialization", 
+                           language=self.config.get('service.language'),
+                           audio_device=self.config.get('service.audio_device'))
         
         # Initialize components
         self.audio_capture = None
@@ -35,38 +38,55 @@ class STTService:
         
         self._running = False
         self._processing = False
+        self._transcription_count = 0
+        self._error_count = 0
         
-        self._initialize_components()
-    
-    def _setup_logging(self) -> None:
-        """Configure logging based on config."""
-        log_level = self.config.get('logging.level', 'INFO')
-        log_file = self.config.get('logging.file')
-        
-        logging.basicConfig(
-            level=getattr(logging, log_level),
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.StreamHandler(),
-            ] + ([logging.FileHandler(log_file)] if log_file else [])
-        )
+        try:
+            self._initialize_components()
+            init_duration = time.time() - self.service_start_time
+            log_operation_success("STT Service Initialization", duration=init_duration)
+        except Exception as e:
+            log_operation_error("STT Service Initialization", e)
+            raise
     
     def _initialize_components(self) -> None:
         """Initialize all service components."""
-        # Audio capture
-        self.audio_capture = AudioCapture(
-            sample_rate=self.config.get('audio.sample_rate', 16000),
-            channels=self.config.get('audio.channels', 1),
-            max_duration=self.config.get('audio.max_duration', 30),
-            device=self.config.get('service.audio_device', 'default')
-        )
+        log_operation_start("Component Initialization")
         
-        # STT Engine
-        engine_type = self.config.get('model.type', 'dummy')
-        model_path = self.config.get('model.path', '')
-        self.engine = create_engine(engine_type, model_path)
-        
-        # Input handler
+        try:
+            # Audio capture
+            logger.info("🎤 Initializing audio capture...")
+            self.audio_capture = AudioCapture(
+                sample_rate=self.config.get('audio.sample_rate', 16000),
+                channels=self.config.get('audio.channels', 1),
+                max_duration=self.config.get('audio.max_duration', 30),
+                device=self.config.get('service.audio_device', 'default')
+            )
+            
+            # STT Engine
+            engine_type = self.config.get('model.type', 'dummy')
+            model_path = self.config.get('model.path', '')
+            logger.info(f"🤖 Initializing STT engine: {engine_type}")
+            self.engine = create_engine(engine_type, model_path)
+            
+            # Input handler
+            logger.info("⌨️ Initializing input handler...")
+            self.input_handler = create_hotkey_handler(
+                self.config.get('input.hotkey', 'ctrl+shift+space'),
+                callback=self._on_speech_input
+            )
+            
+            # Output handler
+            logger.info("🖨 Initializing output handler...")
+            self.output_handler = create_output_handler(
+                method=self.config.get('output.method', 'keyboard')
+            )
+            
+            logger.success("✅ All components initialized successfully")
+            
+        except Exception as e:
+            log_malfunction("STTService", f"Component initialization failed: {e}", "CRITICAL")
+            raise
         hotkey = self.config.get('input.hotkey', 'ctrl+shift+space')
         self.input_handler = create_hotkey_handler(hotkey)
         
@@ -126,27 +146,29 @@ class STTService:
     def _on_trigger(self) -> None:
         """Handle trigger event (hotkey press)."""
         if self._processing:
-            logger.info("Already processing, ignoring trigger")
+            log_malfunction("STTService", "Trigger activated while already processing", "WARNING")
             return
         
         self._processing = True
+        operation_start = time.time()
         
         try:
             # Toggle recording
             if self.audio_capture.is_recording():
-                logger.info("Stopping recording...")
+                log_audio_event("Recording stop triggered")
                 audio_data = self.audio_capture.stop_recording()
                 
                 if len(audio_data) > 0:
                     self._process_audio(audio_data)
                 else:
-                    logger.warning("No audio data captured")
+                    log_malfunction("STTService", "No audio data captured during recording session", "WARNING")
             else:
-                logger.info("Starting recording...")
+                log_audio_event("Recording start triggered")
                 self.audio_capture.start_recording()
         
         except Exception as e:
-            logger.error(f"Error handling trigger: {e}")
+            operation_duration = time.time() - operation_start
+            log_operation_error("Trigger Handling", e, duration=operation_duration)
         
         finally:
             self._processing = False
@@ -157,26 +179,45 @@ class STTService:
         Args:
             audio_data: Audio data to process
         """
-        logger.info(f"Processing audio ({len(audio_data)} samples)...")
+        start_time = time.time()
+        self._transcription_count += 1
+        
+        log_operation_start("Audio Processing", 
+                           samples=len(audio_data), 
+                           transcription_id=self._transcription_count)
         
         try:
             # Transcribe
             language = self.config.get('service.language', 'en')
             text = self.engine.transcribe(audio_data, language)
             
-            if text:
-                logger.info(f"Transcription: {text}")
+            if text and text.strip():
+                log_stt_event("Transcription success", text=text, transcription_id=self._transcription_count)
                 
                 # Send to output
+                output_start = time.time()
                 if self.output_handler.send_text(text):
-                    logger.info("Text sent successfully")
+                    output_duration = time.time() - output_start
+                    logger.success(f"✅ Text output successful: '{text[:50]}{'...' if len(text) > 50 else ''}'")
+                    log_performance("Text output", output_duration, threshold=1.0)
                 else:
-                    logger.error("Failed to send text")
+                    log_malfunction("STTService", "Failed to send text to output", "ERROR")
+                    self._error_count += 1
             else:
-                logger.warning("No transcription result")
+                log_malfunction("STTService", "Empty transcription result", "WARNING")
+                self._error_count += 1
+            
+            processing_duration = time.time() - start_time
+            log_operation_success("Audio Processing", 
+                                duration=processing_duration,
+                                transcription_id=self._transcription_count)
         
         except Exception as e:
-            logger.error(f"Error processing audio: {e}")
+            processing_duration = time.time() - start_time  
+            self._error_count += 1
+            log_operation_error("Audio Processing", e, 
+                              duration=processing_duration,
+                              transcription_id=self._transcription_count)
     
     def run(self) -> None:
         """Run the service (blocking call)."""
