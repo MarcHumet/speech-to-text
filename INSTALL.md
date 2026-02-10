@@ -7,8 +7,24 @@ This guide will walk you through installing and setting up the Speech-to-Text se
 - Pop!_OS 20.04+ or Ubuntu 20.04+
 - Python 3.8 or higher
 - Microphone/audio input device
-- At least 2GB free disk space (for models)
+- At least 4GB free disk space (for models and GPU libraries)
 - Internet connection (for initial setup)
+- **Optional but Recommended**: NVIDIA GPU with 4GB+ VRAM for GPU acceleration
+
+## GPU Acceleration (Optional but Recommended)
+
+For 10-50x faster transcription, install NVIDIA GPU support:
+
+```bash
+# Check if you have NVIDIA GPU
+nvidia-smi
+
+# Install NVIDIA drivers (if needed)
+sudo apt install nvidia-driver-580  # or latest available
+
+# Verify GPU is detected
+nvidia-smi
+```
 
 ## Step-by-Step Installation
 
@@ -19,16 +35,26 @@ This guide will walk you through installing and setting up the Speech-to-Text se
 sudo apt update
 
 # Install Python and development tools
-sudo apt install -y python3 python3-pip python3-venv
+sudo apt install -y python3 python3-pip python3-venv python3-dev
 
-# Install audio libraries
-sudo apt install -y portaudio19-dev python3-pyaudio
+# Audio system dependencies
+sudo apt install -y portaudio19-dev libasound2-dev
+
+# GUI/X11 dependencies for keyboard automation
+sudo apt install -y python3-tk libx11-dev libxext-dev libxtst-dev libxss-dev
 
 # Install FFmpeg (required for Whisper)
 sudo apt install -y ffmpeg
 
-# Install additional dependencies for keyboard/clipboard
-sudo apt install -y xclip  # For X11 clipboard support
+# Build tools for compiling packages
+sudo apt install -y build-essential pkg-config
+
+# Additional audio processing libraries
+sudo apt install -y libjack-jackd2-dev
+
+# Install uv (fast Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Restart terminal or run: source ~/.profile
 ```
 
 ### 2. Clone the Repository
@@ -39,62 +65,85 @@ git clone https://github.com/MarcHumet/speech-to-text.git
 cd speech-to-text
 ```
 
-### 3. Set Up Python Virtual Environment
+### 3. Set Up Python Environment with uv
 
 ```bash
-# Create virtual environment
-python3 -m venv venv
+# Create virtual environment with uv (recommended)
+uv venv
 
 # Activate virtual environment
-source venv/bin/activate
+source .venv/bin/activate
 
-# Upgrade pip
-pip install --upgrade pip
+# Upgrade pip (uv handles this automatically)
+# pip install --upgrade pip  # Not needed with uv
 ```
 
 ### 4. Install Python Dependencies
 
 ```bash
-# Install core dependencies
-pip install -r requirements.txt
+# Install core dependencies with uv (faster)
+uv pip install -r requirements.txt
 
 # Install the service in development mode
-pip install -e .
+uv pip install -e .
 ```
 
-### 5. Install STT Model
+### 5. Install STT Engine
 
-Choose one of the following options:
+Choose the best option for your hardware:
 
-#### Option A: Dummy Model (Testing Only)
-
-No additional installation needed. The dummy model is included for testing.
-
-#### Option B: OpenAI Whisper (Recommended)
+#### Option A: GPU-Accelerated (Recommended for NVIDIA GPUs)
 
 ```bash
-# Install Whisper
-pip install openai-whisper
+# Install faster-whisper (GPU-optimized)
+uv add faster-whisper
 
-# Pre-download a model (optional but recommended)
-# Available models: tiny, base, small, medium, large
+# Verify GPU is available
+nvidia-smi
+
+# Test GPU acceleration
+uv run python -c "from faster_whisper import WhisperModel; print('GPU support available!')"
+```
+
+#### Option B: CPU-Only Whisper
+
+```bash
+# Install standard OpenAI Whisper
+uv add openai-whisper
+
+# Pre-download a model (recommended)
 python3 -c "import whisper; whisper.load_model('base')"
 ```
 
-Model sizes and requirements:
-- `tiny`: ~75 MB, fastest, lowest quality
-- `base`: ~150 MB, good balance (recommended for testing)
-- `small`: ~500 MB, better quality
+#### Option C: Testing Only (Not Recommended)
+
+```bash
+# Dummy model is already included
+# Only use for initial testing - produces random text
+```
+
+**Model Performance Comparison:**
+
+| Model Type | GPU Support | Speed | Memory | Quality |
+|------------|-------------|-------|--------|---------|
+| `faster-whisper` | ✅ NVIDIA | Very Fast | Low (VRAM) | Excellent |
+| `whisper` | ❌ CPU-only | Slow | High (RAM) | Good |
+| `dummy` | ❌ Testing | Instant | Very Low | Random text |
+
+**Recommended Model Sizes:**
+- `tiny`: ~75 MB, fastest, good for short phrases
+- `base`: ~150 MB, **recommended balance** of speed/quality
+- `small`: ~500 MB, better quality, slower
 - `medium`: ~1.5 GB, high quality
-- `large`: ~3 GB, best quality
+- `large`: ~3 GB, best quality, requires more VRAM
 
 ## Configuration
 
 ### 1. Create Configuration File
 
 ```bash
-# Create example config
-python cli.py config --create
+# Create example config using uv
+uv run python cli.py config --create
 
 # This creates config.yaml in the current directory
 ```
@@ -120,9 +169,18 @@ output:
   method: keyboard  # Options: keyboard, clipboard, both
 
 model:
-  type: whisper  # Change to: whisper (from dummy)
-  path: base     # Change to: tiny, small, medium, or large
+  type: faster-whisper  # GPU-optimized (recommended)
+  path: base           # Good balance of speed/quality
+
+audio:
+  sample_rate: 16000    # Standard for Whisper
+  max_duration: 20      # Maximum recording time (seconds)
 ```
+
+**Engine Options:**
+- `faster-whisper`: GPU-accelerated, **recommended**
+- `whisper`: CPU-only fallback
+- `dummy`: Testing only (produces random text)
 
 ## First Run
 
@@ -131,39 +189,100 @@ model:
 Before running the service, test that all components work:
 
 ```bash
-# Test all components
-python cli.py test
+# Quick system check with GPU detection
+uv run python -c "
+import sys
+print('🔍 System Check')
+print('-' * 20)
 
-# You should see:
-# ✓ Audio capture available
-# ✓ Keyboard output available
-# ✓ Clipboard output available
+try:
+    import sounddevice
+    print('✅ Audio: sounddevice available')
+except Exception as e:
+    print(f'❌ Audio: {e}')
+
+try:
+    import pyautogui
+    print('✅ GUI: pyautogui available')
+except Exception as e:
+    print(f'❌ GUI: {e}')
+
+try:
+    import pynput
+    print('✅ Input: pynput available')
+except Exception as e:
+    print(f'❌ Input: {e}')
+
+# Check STT engines
+try:
+    import faster_whisper
+    print('✅ STT: faster-whisper (GPU-optimized) available')
+except ImportError:
+    try:
+        import whisper
+        print('✅ STT: whisper (CPU-only) available')
+    except ImportError:
+        print('❌ STT: No whisper engine installed')
+
+# Check GPU
+try:
+    import subprocess
+    gpu = subprocess.run(['nvidia-smi'], capture_output=True)
+    if gpu.returncode == 0:
+        print('✅ GPU: NVIDIA GPU detected')
+    else:
+        print('ℹ️ GPU: No NVIDIA GPU (CPU-only mode)')
+except:
+    print('ℹ️ GPU: No NVIDIA drivers')
+"
+
+# Comprehensive component tests
+uv run python cli.py test all
+
+# Test specific components
+uv run python cli.py test audio
+uv run python cli.py test keyboard
+uv run python cli.py test clipboard
 ```
 
-If any component shows ✗, install the missing dependency:
+If any component shows ❌, install the missing dependency:
 
 ```bash
 # For audio:
-pip install sounddevice
+uv pip install sounddevice
 
-# For keyboard:
-pip install pynput
+# For GUI automation:
+uv pip install pyautogui
+
+# For input detection:
+uv pip install pynput
 
 # For clipboard:
-pip install pyperclip
+uv pip install pyperclip
+
+# For GPU acceleration:
+uv add faster-whisper
+
+# For CPU-only STT:
+uv add openai-whisper
 ```
 
 ### 2. Run the Service
 
 ```bash
-# Run with dummy model (quick test)
-python cli.py run
+# Run with default configuration (faster-whisper + base model)
+uv run python cli.py run
 
-# Run with Whisper
-python cli.py run -m base
+# Run with custom configuration
+uv run python cli.py run -c config.yaml
 
-# Run with Spanish
-python cli.py run -l es
+# Language-specific runs
+uv run python cli.py run -l en  # English
+uv run python cli.py run -l es  # Spanish
+uv run python cli.py run -l ca  # Catalan
+
+# Output to clipboard instead of typing
+uv run python cli.py run -o clipboard
 ```
 
 ### 3. Test Speech Recognition

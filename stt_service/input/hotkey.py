@@ -126,22 +126,14 @@ class PynputHotkeyHandler(InputHandler):
         self._callback = callback
         self._active = True
         
-        # Parse hotkey string
-        keys = self._parse_hotkey(self.hotkey)
-        
-        # Create global hotkey
+        # Parse hotkey string and create global hotkey
         try:
-            hotkey_obj = self.pynput_keyboard.HotKey(
-                keys,
-                self._on_hotkey_pressed
-            )
+            # Use GlobalHotKeys which we know works
+            hotkey_map = {
+                f'<{self.hotkey.replace("+", ">+<")}>': self._on_hotkey_pressed
+            }
             
-            # Create listener
-            self._listener = self.pynput_keyboard.Listener(
-                on_press=lambda k: hotkey_obj.press(self._listener.canonical(k)),
-                on_release=lambda k: hotkey_obj.release(self._listener.canonical(k))
-            )
-            
+            self._listener = self.pynput_keyboard.GlobalHotKeys(hotkey_map)
             self._listener.start()
             logger.info(f"Pynput hotkey handler started: {self.hotkey}")
             

@@ -9,7 +9,7 @@ from .core.audio_capture import AudioCapture
 from .core.engine import create_engine, STTEngine
 from .input.hotkey import create_hotkey_handler
 from .output.keyboard import create_output_handler
-from .core.logger import get_logger, log_operation_start, log_operation_success, log_operation_error, log_malfunction, log_stt_event
+from .core.logger import get_logger, log_operation_start, log_operation_success, log_operation_error, log_malfunction, log_stt_event, log_audio_event, log_performance
 
 logger = get_logger(__name__)
 
@@ -73,7 +73,7 @@ class STTService:
             logger.info("⌨️ Initializing input handler...")
             self.input_handler = create_hotkey_handler(
                 self.config.get('input.hotkey', 'ctrl+shift+space'),
-                callback=self._on_speech_input
+                backend='pynput'  # Use pynput to avoid requiring root
             )
             
             # Output handler
@@ -87,14 +87,6 @@ class STTService:
         except Exception as e:
             log_malfunction("STTService", f"Component initialization failed: {e}", "CRITICAL")
             raise
-        hotkey = self.config.get('input.hotkey', 'ctrl+shift+space')
-        self.input_handler = create_hotkey_handler(hotkey)
-        
-        # Output handler
-        output_method = self.config.get('output.method', 'keyboard')
-        self.output_handler = create_output_handler(output_method)
-        
-        logger.info("All components initialized")
     
     def start(self) -> None:
         """Start the STT service."""
@@ -192,6 +184,8 @@ class STTService:
             text = self.engine.transcribe(audio_data, language)
             
             if text and text.strip():
+                # Log the detected text for proper visibility
+                logger.info(f"🎯 DETECTED TEXT: \"{text}\"")
                 log_stt_event("Transcription success", text=text, transcription_id=self._transcription_count)
                 
                 # Send to output
@@ -218,6 +212,19 @@ class STTService:
             log_operation_error("Audio Processing", e, 
                               duration=processing_duration,
                               transcription_id=self._transcription_count)
+    
+    def _on_speech_input(self, audio_data: np.ndarray) -> None:
+        """Handle speech input from audio capture.
+        
+        Args:
+            audio_data: Captured audio data
+        """
+        try:
+            # Process the audio data
+            self._process_audio(audio_data)
+        except Exception as e:
+            logger.error(f"Speech input processing failed: {e}")
+            log_malfunction("STTService", f"Speech input failed: {e}", "ERROR")
     
     def run(self) -> None:
         """Run the service (blocking call)."""

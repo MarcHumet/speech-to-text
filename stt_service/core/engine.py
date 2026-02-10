@@ -6,7 +6,7 @@ import numpy as np
 import time
 import random
 
-from .logger import get_logger, log_operation_start, log_operation_success, log_stt_event, log_malfunction
+from .logger import get_logger, log_operation_start, log_operation_success, log_stt_event, log_malfunction, log_performance, log_audio_event
 
 logger = get_logger(__name__)
 
@@ -177,24 +177,48 @@ class WhisperEngine(STTEngine):
             raise RuntimeError("Whisper model not loaded")
         
         try:
+            # Add safety checks and debugging
+            logger.info(f"Audio data: shape={audio.shape}, dtype={audio.dtype}, duration={len(audio)/16000:.2f}s")
+            
+            # Safety check: limit audio length to prevent memory issues
+            max_samples = 16000 * 10  # 10 seconds max
+            if len(audio) > max_samples:
+                logger.warning(f"Audio too long ({len(audio)} samples), truncating to 10 seconds")
+                audio = audio[:max_samples]
+            
             # Whisper expects float32 audio
             if audio.dtype != np.float32:
                 audio = audio.astype(np.float32)
             
-            # Normalize audio
+            # Normalize audio to [-1, 1] range
             if audio.max() > 1.0 or audio.min() < -1.0:
-                audio = audio / max(abs(audio.max()), abs(audio.min()))
+                max_val = max(abs(audio.max()), abs(audio.min()))
+                audio = audio / max_val
+                logger.info(f"Audio normalized by factor: {max_val}")
             
-            # Transcribe
-            options = {}
+            # Additional safety: ensure audio is 1D
+            if len(audio.shape) > 1:
+                audio = audio.flatten()
+                logger.info("Audio flattened to 1D")
+            
+            # Transcribe with minimal options to reduce memory usage
+            options = {
+                'fp16': False,  # Use fp32 to avoid potential issues
+                'verbose': False,  # Reduce memory overhead
+            }
             if language:
                 options['language'] = language
             
+            logger.info(f"Starting Whisper transcription with {len(audio)} samples...")
             result = self.model.transcribe(audio, **options)
             return result['text'].strip()
             
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
+            # Check if it's a memory error
+            if "allocate memory" in str(e) or "out of memory" in str(e).lower():
+                logger.warning("Whisper memory error - consider using a lighter model or shorter audio clips")
+                return "[Memory Error: Audio too long or system low on RAM]"
             return ""
     
     def is_ready(self) -> bool:
@@ -206,20 +230,165 @@ class WhisperEngine(STTEngine):
         return self.ready
 
 
-def create_engine(engine_type: str = 'dummy', model_path: str = '') -> STTEngine:
+class FasterWhisperEngine(STTEngine):
+    """Faster Whisper STT engine with GPU support (uses ctranslate2)."""
+    
+    def __init__(self):
+        self.model = None
+        self.ready = False
+        logger.info("Initialized Faster Whisper STT Engine (GPU-optimized)")
+    
+    def load_model(self, model_path: str) -> None:
+        """Load Faster Whisper model.
+        
+        Args:
+            model_path: Model name or path (e.g., 'tiny', 'base', 'small', 'medium', 'large')
+        """
+        try:
+            from faster_whisper import WhisperModel
+            
+            logger.info(f"Loading Faster Whisper model: {model_path}")
+            
+            # Try GPU first, fallback to CPU
+            try:
+                # Use GPU with CUDA
+                self.model = WhisperModel(model_path, device="cuda", compute_type="float16")
+                logger.info("✅ Faster Whisper model loaded on GPU with CUDA!")
+            except Exception as gpu_error:
+                logger.warning(f"GPU loading failed: {gpu_error}")
+                # Fallback to CPU
+                self.model = WhisperModel(model_path, device="cpu", compute_type="int8")
+                logger.info("✅ Faster Whisper model loaded on CPU (fallback)")
+            
+            self.ready = True
+            
+        except ImportError:
+            logger.error("faster-whisper package not installed")
+            raise RuntimeError("Install faster-whisper: uv add faster-whisper")
+        except Exception as e:
+            logger.error(f"Failed to load Faster Whisper model: {e}")
+            raise
+    
+    def transcribe(self, audio: np.ndarray, language: Optional[str] = None) -> str:
+        """Transcribe audio using Faster Whisper.
+        
+        Args:
+            audio: Audio data as float32 numpy array
+            language: Language code ('en', 'es', 'ca')
+            
+        Returns:
+            Transcribed text
+        """
+        if not self.ready or self.model is None:
+            raise RuntimeError("Faster Whisper model not loaded")
+        
+        try:
+            # Add safety checks (use 16000 as fallback sample rate for duration estimation)
+            estimated_sample_rate = 16000  # Default assumption for duration calculation
+            logger.info(f"Audio data: shape={audio.shape}, dtype={audio.dtype}, duration={len(audio)/estimated_sample_rate:.2f}s")
+            
+            # Convert 2D audio to 1D if needed (faster-whisper expects 1D)
+            if len(audio.shape) == 2:
+                if audio.shape[1] == 1:
+                    # Mono audio: (samples, 1) -> (samples,)
+                    audio = audio.flatten()
+                    logger.info(f"Flattened mono audio to 1D: shape={audio.shape}")
+                else:
+                    # Stereo audio: (samples, 2) -> (samples,) by averaging channels
+                    audio = np.mean(audio, axis=1)
+                    logger.info(f"Converted stereo to mono: shape={audio.shape}")
+            
+            # Safety check: limit audio length to prevent memory issues
+            # Use estimated sample rate for max samples (assume 8-16kHz range)
+            max_samples = estimated_sample_rate * 10  # 10 seconds max
+            if len(audio) > max_samples:
+                logger.warning(f"Audio too long ({len(audio)} samples), truncating to 10 seconds")
+                audio = audio[:max_samples]
+            
+            # Faster-whisper expects float32 audio
+            if audio.dtype != np.float32:
+                audio = audio.astype(np.float32)
+            
+            # Additional safety: check memory usage
+            audio_size_mb = audio.nbytes / (1024 * 1024)
+            if audio_size_mb > 50:  # Limit to 50MB
+                logger.error(f"Audio data too large: {audio_size_mb:.1f}MB, max allowed: 50MB")
+                return ""
+            
+            # Validate audio is not empty
+            if len(audio) == 0:
+                logger.warning("Empty audio array received")
+                return ""
+            
+            # Normalize audio to [-1, 1] range if needed
+            audio_max = np.abs(audio).max()
+            if audio_max > 1.0:
+                audio = audio / audio_max
+                logger.info(f"Audio normalized by factor: {audio_max}")
+            elif audio_max == 0.0:
+                logger.warning("Silent audio detected (all zeros)")
+                return ""
+            
+            # Transcribe using faster-whisper
+            segments, info = self.model.transcribe(
+                audio,
+                language=language,
+                beam_size=1,  # Faster inference
+                best_of=1,    # Faster inference
+                vad_filter=True,  # Voice activity detection
+                vad_parameters=dict(min_silence_duration_ms=500)
+            )
+            
+            # Combine segments into text
+            text = " ".join([segment.text for segment in segments]).strip()
+            logger.info(f"Faster Whisper transcription completed: '{text}'")
+            return text
+            
+        except MemoryError as e:
+            logger.error(f"Faster Whisper ran out of memory: {e}")
+            logger.error("Try reducing max_duration in config or use smaller model (tiny/base)")
+            return ""
+        except RuntimeError as e:
+            if "can't allocate memory" in str(e).lower():
+                logger.error(f"Memory allocation failed: {e}")
+                logger.error("Try reducing max_duration or switching to CPU-only whisper engine")
+            else:
+                logger.error(f"Faster Whisper runtime error: {e}")
+            return ""
+        except Exception as e:
+            logger.error(f"Faster Whisper transcription failed: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
+            return ""
+    
+    def is_ready(self) -> bool:
+        """Check if ready.
+        
+        Returns:
+            True if model loaded
+        """
+        return self.ready
+
+
+def create_engine(engine_type: str = 'faster-whisper', model_path: str = '') -> STTEngine:
     """Factory function to create STT engines.
     
     Args:
-        engine_type: Type of engine ('dummy', 'whisper')
+        engine_type: Type of engine ('faster-whisper', 'whisper', 'dummy')
         model_path: Path to model files
         
     Returns:
         Initialized STT engine
     """
-    if engine_type.lower() == 'whisper':
+    if engine_type.lower() == 'faster-whisper':
+        engine = FasterWhisperEngine()
+    elif engine_type.lower() == 'whisper':
         engine = WhisperEngine()
-    else:
+    elif engine_type.lower() == 'dummy':
         engine = DummyEngine()
+    else:
+        # Default to faster-whisper for unknown types (avoid dummy)
+        logger.warning(f"Unknown engine type '{engine_type}', defaulting to faster-whisper")
+        engine = FasterWhisperEngine()
     
     if model_path:
         engine.load_model(model_path)

@@ -42,10 +42,9 @@ class AudioCapture:
             self.sd = sd
             self.available = True
             log_audio_event("Audio capture initialized", {
-                "device": device_id, 
+                "device": device, 
                 "sample_rate": sample_rate, 
                 "channels": channels,
-                "buffer_size": buffer_size,
                 "max_duration": max_duration
             })
         except ImportError as e:
@@ -70,7 +69,7 @@ class AudioCapture:
         log_audio_event("Recording started", {
             "max_duration": self.max_duration,
             "sample_rate": self.sample_rate,
-            "device": self.device_id
+            "device": self.device
         })
         
         # Start recording in separate thread

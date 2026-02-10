@@ -13,7 +13,11 @@ keyboard>=0.13.5
 pyautogui>=0.9.54
 pyperclip>=1.8.2
 
-# STT Engine - OpenAI Whisper
+# STT Engines
+# GPU-accelerated Whisper (recommended for NVIDIA GPUs)
+faster-whisper>=0.10.0
+
+# CPU-only Whisper (fallback option)
 openai-whisper>=20230124
 
 # Logging with rotation support

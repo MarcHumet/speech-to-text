@@ -63,6 +63,11 @@ sudo apt install build-essential pkg-config
 
 # For some audio processing packages
 sudo apt install libjack-jackd2-dev
+
+# GPU Acceleration (Optional but Recommended)
+# For NVIDIA GPU support with faster-whisper:
+sudo apt install nvidia-driver-580  # or latest available
+# Verify GPU: nvidia-smi
 ```
 
 #### Additional Requirements by Distribution
@@ -72,6 +77,9 @@ sudo apt install libjack-jackd2-dev
 sudo dnf install portaudio-devel python3-devel alsa-lib-devel
 sudo dnf install libX11-devel libXext-devel libXtst-devel libXScrnSaver-devel
 sudo dnf install ffmpeg  # may need RPM Fusion repository
+
+# GPU acceleration (optional)
+sudo dnf install akmod-nvidia xorg-x11-drv-nvidia-cuda
 ```
 
 **Arch Linux:**
@@ -79,6 +87,9 @@ sudo dnf install ffmpeg  # may need RPM Fusion repository
 sudo pacman -S portaudio python python-pip alsa-lib
 sudo pacman -S libx11 libxext libxtst libxss
 sudo pacman -S ffmpeg
+
+# GPU acceleration (optional)
+sudo pacman -S nvidia nvidia-utils cuda
 ```
 
 **macOS:**
@@ -121,15 +132,56 @@ uv pip install -r requirements.txt
 uv pip install -e .
 ```
 
-### Install STT Model (Optional)
+### Install STT Models
 
-For production use, install OpenAI Whisper:
+#### Option 1: GPU-Accelerated (Recommended for NVIDIA GPUs)
+For fast, memory-efficient transcription with GPU support:
 
 ```bash
-uv pip install openai-whisper
+# Install faster-whisper (GPU-optimized)
+uv add faster-whisper
+
+# Verify GPU is detected
+nvidia-smi
 ```
 
-Or use another STT model of your choice and implement the interface in `stt_service/models/`.
+#### Option 2: CPU-Only Whisper
+For systems without NVIDIA GPU:
+
+```bash
+# Install standard OpenAI Whisper
+uv add openai-whisper
+```
+
+#### Option 3: Custom Models
+Implement your own STT model interface in `stt_service/core/engine.py`
+
+### GPU Acceleration Setup
+
+If you have an NVIDIA GPU with CUDA support:
+
+1. **Check GPU availability:**
+   ```bash
+   nvidia-smi  # Should show your GPU
+   ```
+
+2. **Verify CUDA installation:**
+   ```bash
+   nvcc --version  # Should show CUDA version
+   ```
+
+3. **Configure for GPU in `config.yaml`:**
+   ```yaml
+   model:
+     type: faster-whisper  # GPU-optimized engine
+     path: tiny           # or base, small, medium, large
+   ```
+
+**GPU Benefits:**
+- 🚀 **10-50x faster** transcription
+- 🧠 **Lower RAM usage** (uses GPU VRAM instead)
+- ⚡ **Real-time capable** for short clips
+- 🎯 **Better accuracy** with faster processing
 
 ## Quick Start
 
@@ -170,11 +222,27 @@ try:
 except Exception as e:
     print(f'❌ Input: {e}')
 
+# Check STT engines
 try:
-    import whisper
-    print('✅ STT: whisper available')
-except Exception as e:
-    print('⚠️ STT: whisper not installed (optional)')
+    import faster_whisper
+    print('✅ STT: faster-whisper available (GPU-optimized)')
+except ImportError:
+    try:
+        import whisper
+        print('✅ STT: whisper available (CPU-only)')
+    except ImportError:
+        print('⚠️ STT: No whisper engine installed')
+
+# Check GPU
+try:
+    import subprocess
+    gpu_check = subprocess.run(['nvidia-smi'], capture_output=True, text=True)
+    if gpu_check.returncode == 0:
+        print('✅ GPU: NVIDIA GPU detected')
+    else:
+        print('ℹ️ GPU: No NVIDIA GPU (CPU-only mode)')
+except:
+    print('ℹ️ GPU: No NVIDIA drivers (CPU-only mode)')
     
 print('\n🧪 Use \"uv run python cli.py test all\" for detailed tests')
 "
@@ -198,7 +266,10 @@ python cli.py run
 python cli.py run -c config.yaml
 
 # Run with command-line overrides
-python cli.py run -l es -o clipboard
+python cli.py run -l es -o clipboard 
+# uv run python cli.py run -l en  # English
+# uv run python cli.py run -l es  # Spanish
+# uv run python cli.py run -l ca  # Catalan
 ```
 
 ### 4. Use the Service
@@ -227,9 +298,21 @@ output:
   method: keyboard  # keyboard, clipboard, both
 
 model:
-  type: whisper  # dummy, whisper, or custom
-  path: base     # Model size: tiny, base, small, medium, large
+  type: faster-whisper  # dummy, whisper, faster-whisper (GPU-optimized)
+  path: tiny            # Model size: tiny, base, small, medium, large
+
+audio:
+  max_duration: 5       # Maximum recording time (seconds)
+  sample_rate: 16000    # Audio sample rate
 ```
+
+### Model Options
+
+| Model Type | Best For | GPU Support | Memory Usage | Speed |
+|------------|----------|-------------|--------------|-------|
+| `dummy` | Testing | N/A | Very Low | Instant |
+| `whisper` | CPU-only systems | No | High | Slow |
+| `faster-whisper` | NVIDIA GPUs | Yes | Low (uses VRAM) | Very Fast |
 
 ### Configuration Priority
 
