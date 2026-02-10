@@ -7,12 +7,14 @@ sounddevice>=0.4.6
 
 # Input handling - keyboard/hotkey detection
 pynput>=1.7.6
+keyboard>=0.13.5
 
-# Output handling - clipboard
+# Output handling - keyboard typing and clipboard
+pyautogui>=0.9.54
 pyperclip>=1.8.2
 
-# Optional: OpenAI Whisper for STT (can be installed separately)
-# openai-whisper>=20230124
+# STT Engine - OpenAI Whisper
+openai-whisper>=20230124
 
-# Optional: Alternative keyboard library
-# keyboard>=0.13.5
+# Logging with rotation support
+loguru>=0.7.0

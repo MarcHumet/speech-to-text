@@ -3,11 +3,11 @@
 import unittest
 from unittest.mock import Mock, patch, MagicMock
 
-from stt_service.output.keyboard import KeyboardOutput, create_output_handler
+from stt_service.output.keyboard import KeyboardHandler, create_output_handler
 
 
-class TestKeyboardOutput(unittest.TestCase):
-    """Test cases for KeyboardOutput class."""
+class TestKeyboardHandler(unittest.TestCase):
+    """Test cases for KeyboardHandler class."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -19,8 +19,8 @@ class TestKeyboardOutput(unittest.TestCase):
 
     @patch('stt_service.output.keyboard.pyautogui')
     def test_keyboard_output_initialization(self, mock_pyautogui):
-        """Test KeyboardOutput initialization."""
-        output = KeyboardOutput(self.config)
+        """Test KeyboardHandler initialization."""
+        output = KeyboardHandler(self.config)
         
         self.assertEqual(output.output_target, 'active_window')
         self.assertEqual(output.typing_delay, 0.01)
@@ -29,7 +29,7 @@ class TestKeyboardOutput(unittest.TestCase):
     @patch('stt_service.output.keyboard.pyautogui')
     def test_output_to_active_window(self, mock_pyautogui):
         """Test outputting text to active window."""
-        output = KeyboardOutput(self.config)
+        output = KeyboardHandler(self.config)
         test_text = "Hello, world!"
         
         output.output(test_text)
@@ -43,7 +43,7 @@ class TestKeyboardOutput(unittest.TestCase):
         config = self.config.copy()
         config['output_target'] = 'clipboard'
         
-        output = KeyboardOutput(config)
+        output = KeyboardHandler(config)
         test_text = "Clipboard text"
         
         output.output(test_text)
@@ -58,7 +58,7 @@ class TestKeyboardOutput(unittest.TestCase):
         config = self.config.copy()
         config['output_target'] = 'clipboard_paste'
         
-        output = KeyboardOutput(config)
+        output = KeyboardHandler(config)
         test_text = "Paste this text"
         
         output.output(test_text)
@@ -72,7 +72,7 @@ class TestKeyboardOutput(unittest.TestCase):
         config = self.config.copy()
         config['typing_delay'] = 0.05
         
-        output = KeyboardOutput(config)
+        output = KeyboardHandler(config)
         test_text = "Slow typing"
         
         output.output(test_text)
@@ -82,7 +82,7 @@ class TestKeyboardOutput(unittest.TestCase):
     @patch('stt_service.output.keyboard.pyautogui')
     def test_empty_text_handling(self, mock_pyautogui):
         """Test handling of empty text."""
-        output = KeyboardOutput(self.config)
+        output = KeyboardHandler(self.config)
         
         # Empty string
         output.output("")
@@ -99,7 +99,7 @@ class TestKeyboardOutput(unittest.TestCase):
     @patch('stt_service.output.keyboard.pyautogui')
     def test_text_preprocessing(self, mock_pyautogui):
         """Test text preprocessing before output."""
-        output = KeyboardOutput(self.config)
+        output = KeyboardHandler(self.config)
         
         # Test trimming whitespace
         test_text = "  Hello, world!  "
@@ -110,7 +110,7 @@ class TestKeyboardOutput(unittest.TestCase):
     @patch('stt_service.output.keyboard.pyautogui')
     def test_special_characters_handling(self, mock_pyautogui):
         """Test handling of special characters."""
-        output = KeyboardOutput(self.config)
+        output = KeyboardHandler(self.config)
         
         test_cases = [
             "Hello\nworld",  # Newline
@@ -129,18 +129,18 @@ class TestKeyboardOutput(unittest.TestCase):
         """Test error handling in keyboard output."""
         mock_pyautogui.typewrite.side_effect = Exception("Keyboard error")
         
-        output = KeyboardOutput(self.config)
+        output = KeyboardHandler(self.config)
         
         # Should handle the exception gracefully
         try:
             output.output("Test text")
         except Exception:
-            self.fail("KeyboardOutput should handle exceptions gracefully")
+            self.fail("KeyboardHandler should handle exceptions gracefully")
 
     @patch('stt_service.output.keyboard.pyautogui')
     def test_is_available(self, mock_pyautogui):
         """Test availability checking."""
-        output = KeyboardOutput(self.config)
+        output = KeyboardHandler(self.config)
         
         # Should be available if pyautogui is working
         self.assertTrue(output.is_available())
@@ -157,7 +157,7 @@ class TestKeyboardOutput(unittest.TestCase):
         config = self.config.copy()
         config['clear_clipboard'] = True
         
-        output = KeyboardOutput(config)
+        output = KeyboardHandler(config)
         test_text = "Text to clear"
         
         output.output(test_text)
@@ -166,7 +166,7 @@ class TestKeyboardOutput(unittest.TestCase):
         mock_pyautogui.typewrite.assert_called_once_with(test_text, interval=0.01)
 
 
-class TestKeyboardOutputFactory(unittest.TestCase):
+class TestKeyboardHandlerFactory(unittest.TestCase):
     """Test cases for keyboard output factory function."""
 
     def setUp(self):
@@ -181,7 +181,7 @@ class TestKeyboardOutputFactory(unittest.TestCase):
         """Test creating keyboard output handler with factory function."""
         handler = create_output_handler(self.config)
         
-        self.assertIsInstance(handler, KeyboardOutput)
+        self.assertIsInstance(handler, KeyboardHandler)
         self.assertEqual(handler.output_target, 'active_window')
 
     @patch('stt_service.output.keyboard.pyautogui')
@@ -191,7 +191,7 @@ class TestKeyboardOutputFactory(unittest.TestCase):
         
         handler = create_output_handler(minimal_config)
         
-        self.assertIsInstance(handler, KeyboardOutput)
+        self.assertIsInstance(handler, KeyboardHandler)
         # Should use default values
         self.assertIsNotNone(handler.output_target)
 
@@ -204,7 +204,7 @@ class TestKeyboardOutputFactory(unittest.TestCase):
             config = {'output_target': target}
             handler = create_output_handler(config)
             
-            self.assertIsInstance(handler, KeyboardOutput)
+            self.assertIsInstance(handler, KeyboardHandler)
             self.assertEqual(handler.output_target, target)
 
 

@@ -20,20 +20,19 @@ class TestSTTEngine(unittest.TestCase):
         """Test STTEngine interface definition."""
         # Create a concrete implementation for testing
         class TestEngine(STTEngine):
-            def __init__(self, config):
-                super().__init__(config)
-                self.is_ready = True
-            
-            def transcribe(self, audio_data):
-                return "test transcription"
-            
-            def is_available(self):
-                return True
-            
-            def cleanup(self):
+            def __init__(self):
+                self.ready = True
+                
+            def load_model(self, model_path: str) -> None:
                 pass
+                
+            def transcribe(self, audio, language=None):
+                return "test transcription"
+                
+            def is_ready(self) -> bool:
+                return self.ready
         
-        engine = TestEngine({})
+        engine = TestEngine()
         self.assertTrue(hasattr(engine, 'transcribe'))
         self.assertTrue(hasattr(engine, 'is_available'))
         self.assertTrue(hasattr(engine, 'cleanup'))
