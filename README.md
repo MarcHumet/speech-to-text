@@ -40,18 +40,52 @@ stt_service/
 
 ### Prerequisites
 
+#### System Dependencies (Ubuntu/Debian)
+
 ```bash
 # Update system packages
 sudo apt update
 
-# Install Python 3 and pip (if not already installed)
-sudo apt install python3 python3-pip python3-venv
+# Install Python 3 and development tools (if not already installed)
+sudo apt install python3 python3-pip python3-venv python3-dev
 
-# Install system dependencies for audio
-sudo apt install portaudio19-dev python3-pyaudio
+# Audio system dependencies
+sudo apt install portaudio19-dev libasound2-dev
 
-# For Whisper support (optional)
+# GUI/X11 dependencies for keyboard automation
+sudo apt install python3-tk python3-dev libx11-dev libxext-dev libxtst-dev libxss-dev
+
+# Optional: FFmpeg for Whisper audio processing
 sudo apt install ffmpeg
+
+# Optional: Build tools for compiling Python packages
+sudo apt install build-essential pkg-config
+
+# For some audio processing packages
+sudo apt install libjack-jackd2-dev
+```
+
+#### Additional Requirements by Distribution
+
+**Fedora/RHEL/CentOS:**
+```bash
+sudo dnf install portaudio-devel python3-devel alsa-lib-devel
+sudo dnf install libX11-devel libXext-devel libXtst-devel libXScrnSaver-devel
+sudo dnf install ffmpeg  # may need RPM Fusion repository
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S portaudio python python-pip alsa-lib
+sudo pacman -S libx11 libxext libxtst libxss
+sudo pacman -S ffmpeg
+```
+
+**macOS:**
+```bash
+# Install Homebrew first: https://brew.sh
+brew install portaudio python
+# XQuartz may be needed for GUI automation: https://xquartz.org
 ```
 
 ### Install uv (if not already installed)
@@ -112,13 +146,46 @@ nano config.yaml
 ### 2. Test Components
 
 ```bash
-# Test all components
-python cli.py test
+# Quick system check (recommended first)
+uv run python -c "
+import sys
+print('🔍 System Dependency Check')
+print('-' * 30)
 
-# Test specific component
-python cli.py test audio
-python cli.py test keyboard
-python cli.py test clipboard
+try:
+    import sounddevice
+    print('✅ Audio: sounddevice available')
+except Exception as e:
+    print(f'❌ Audio: {e}')
+
+try:
+    import pyautogui
+    print('✅ GUI: pyautogui available') 
+except Exception as e:
+    print(f'❌ GUI: {e}')
+
+try:
+    import pynput
+    print('✅ Input: pynput available')
+except Exception as e:
+    print(f'❌ Input: {e}')
+
+try:
+    import whisper
+    print('✅ STT: whisper available')
+except Exception as e:
+    print('⚠️ STT: whisper not installed (optional)')
+    
+print('\n🧪 Use \"uv run python cli.py test all\" for detailed tests')
+"
+
+# Test all components
+uv run python cli.py test all
+
+# Test specific components
+uv run python cli.py test audio
+uv run python cli.py test keyboard
+uv run python cli.py test clipboard
 ```
 
 ### 3. Run the Service
@@ -300,14 +367,54 @@ python cli.py test -v
 
 ## Troubleshooting
 
+### System Dependencies
+
+**PortAudio Issues:**
+```bash
+# If sounddevice fails to import
+sudo apt install portaudio19-dev libasound2-dev
+# Then reinstall sounddevice
+uv pip uninstall sounddevice
+uv pip install sounddevice
+```
+
+**X11/GUI Issues:**
+```bash
+# If pyautogui/pynput don't work
+sudo apt install libx11-dev libxtst-dev python3-tk
+# For Wayland users, you may need X11 session
+# Or install additional Wayland support packages
+```
+
+**Audio Permission Issues:**
+```bash
+# Add user to audio group
+sudo usermod -a -G audio $USER
+# Log out and back in, then test:
+python -m sounddevice
+```
+
 ### Audio Issues
 
 ```bash
-# Check audio devices
-python -m sounddevice
+# Check available audio devices
+uv run python -c "import sounddevice as sd; print(sd.query_devices())"
 
 # Test audio recording
-python cli.py test audio
+uv run python cli.py test audio
+```
+
+### Keyboard/Input Issues
+
+```bash
+# Test keyboard output
+uv run python cli.py test keyboard
+
+# Test clipboard functionality  
+uv run python cli.py test clipboard
+
+# For global hotkeys, ensure X11 session (not Wayland)
+echo $XDG_SESSION_TYPE  # should show 'x11'
 ```
 
 ### Permission Issues
