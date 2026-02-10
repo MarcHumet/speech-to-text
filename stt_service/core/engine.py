@@ -236,6 +236,9 @@ class FasterWhisperEngine(STTEngine):
     def __init__(self):
         self.model = None
         self.ready = False
+        self.model_path = None
+        self.device = None
+        self.compute_type = None
         logger.info("Initialized Faster Whisper STT Engine (GPU-optimized)")
     
     def load_model(self, model_path: str) -> None:
@@ -249,15 +252,22 @@ class FasterWhisperEngine(STTEngine):
             
             logger.info(f"Loading Faster Whisper model: {model_path}")
             
+            # Store model configuration for lazy loading
+            self.model_path = model_path
+            
             # Try GPU first, fallback to CPU
             try:
                 # Use GPU with CUDA
-                self.model = WhisperModel(model_path, device="cuda", compute_type="float16")
+                self.device = "cuda"
+                self.compute_type = "float16"
+                self.model = WhisperModel(model_path, device=self.device, compute_type=self.compute_type)
                 logger.info("✅ Faster Whisper model loaded on GPU with CUDA!")
             except Exception as gpu_error:
                 logger.warning(f"GPU loading failed: {gpu_error}")
                 # Fallback to CPU
-                self.model = WhisperModel(model_path, device="cpu", compute_type="int8")
+                self.device = "cpu"
+                self.compute_type = "int8"
+                self.model = WhisperModel(model_path, device=self.device, compute_type=self.compute_type)
                 logger.info("✅ Faster Whisper model loaded on CPU (fallback)")
             
             self.ready = True
@@ -279,6 +289,9 @@ class FasterWhisperEngine(STTEngine):
         Returns:
             Transcribed text
         """
+        # Ensure model is loaded (supports lazy loading)
+        self._ensure_model_loaded()
+        
         if not self.ready or self.model is None:
             raise RuntimeError("Faster Whisper model not loaded")
         
@@ -342,6 +355,10 @@ class FasterWhisperEngine(STTEngine):
             # Combine segments into text
             text = " ".join([segment.text for segment in segments]).strip()
             logger.info(f"Faster Whisper transcription completed: '{text}'")
+            
+            # Note: Model stays loaded in GPU memory for better performance
+            # Use unload_model() manually if you need to free GPU memory
+            
             return text
             
         except MemoryError as e:
