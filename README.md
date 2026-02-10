@@ -51,30 +51,46 @@ We use **Podman** instead of Docker for better security, rootless operation, and
 git clone https://github.com/MarcHumet/speech-to-text.git
 cd speech-to-text
 
-# Run the automated setup script
-chmod +x podman-setup.sh
-./podman-setup.sh
+# Install Podman (Ubuntu/Debian)
+sudo apt update
+sudo apt install podman
 
-# Start the containerized service
-podman-compose up -d
+# Build the container
+podman build -t stt-service .
+
+# Run the container
+podman run --rm stt-service
 ```
 
-The setup script will:
-- Install Podman and NVIDIA Container Toolkit
-- Configure rootless operation and GPU support
-- Set up audio and X11 permissions
-- Create systemd service for auto-start
+#### Container Build Details
 
-#### Manual Container Setup
+The container uses **Python 3.11-slim** as the base image for optimal compatibility with ML dependencies (faster-whisper, torch, openai-whisper). The build includes:
 
-If you prefer manual setup or need to customize:
+- All audio processing dependencies (portaudio, alsa, pulseaudio)
+- X11/keyboard automation tools (xdotool, xclip)
+- Full requirements.txt with torch, faster-whisper, and openai-whisper
+
+#### Running with Audio/Display Access
+
+For full functionality (audio capture and keyboard output), you need to pass through audio and X11:
 
 ```bash
-# 1. Install Podman (Ubuntu/Debian)
-sudo apt update
-sudo apt install podman podman-compose
+# Run with audio and display access
+podman run --rm \
+  --device /dev/snd \
+  -e DISPLAY=$DISPLAY \
+  -e PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native \
+  -v ${XDG_RUNTIME_DIR}/pulse/native:${XDG_RUNTIME_DIR}/pulse/native \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  stt-service
+```
 
-# 2. For GPU support, install NVIDIA Container Toolkit
+#### Optional: GPU Support
+
+For NVIDIA GPU acceleration (optional but faster transcription):
+
+```bash
+# Install NVIDIA Container Toolkit (if available)
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
 curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
   sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
@@ -82,58 +98,37 @@ curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-contai
 sudo apt update
 sudo apt install nvidia-container-toolkit
 
-# 3. Configure rootless Podman
-podman system connection default --remote unix:///run/user/$UID/podman/podman.sock
-
-# 4. Build and run containers
-podman-compose up --build -d
+# Run with GPU support
+podman run --rm --device nvidia.com/gpu=all stt-service
 ```
+
+> **Note:** GPU support requires working NVIDIA drivers and Container Toolkit. The service works fine on CPU if GPU setup fails.
 
 #### Container Features
 
 - 🐧 **Rootless**: Runs without root privileges for better security
-- 🚀 **GPU-accelerated**: NVIDIA CUDA support for faster transcription
-- 🗃️ **Database**: PostgreSQL for analytics and session tracking
-- 🔄 **Caching**: Redis for improved performance
-- 📈 **Monitoring**: Health checks and resource monitoring
-- 🔧 **Auto-start**: Systemd service integration
-
-#### Container Architecture
-
-```
-┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│   STT Service   │◄──│   PostgreSQL    │◄──│     Redis       │
-│   (Main App)    │   │   (Analytics)   │   │   (Sessions)    │
-│                 │   │                 │   │                 │
-│ • CUDA Support  │   │ • Persistent    │   │ • Memory Cache  │
-│ • Audio I/O     │   │   Storage       │   │ • Fast Access  │
-│ • X11 GUI       │   │ • Health Check  │   │ • Health Check  │
-└─────────────────┘   └─────────────────┘   └─────────────────┘
-```
+- � **Python 3.11**: Optimal compatibility with ML dependencies (faster-whisper, torch, numba)
+- 🎤 **Audio Ready**: Includes portaudio, alsa, and pulseaudio support
+- ⌨️ **X11 Integration**: xdotool and xclip for keyboard automation
+- 🚀 **GPU Optional**: Works on CPU, faster with NVIDIA GPU
 
 #### Container Usage
 
 ```bash
-# Start all services
-podman-compose up -d
+# Build the container
+podman build -t stt-service .
 
-# View logs
-podman-compose logs -f stt-service
+# Test that the container works
+podman run --rm stt-service python -c "from faster_whisper import WhisperModel; print('OK')"
 
-# Stop services
-podman-compose down
+# Run interactively
+podman run --rm -it stt-service bash
 
-# Check status
-podman-compose ps
+# View container images
+podman images
 
-# Access database
-podman exec -it stt-postgres psql -U stt_user -d stt_db
-
-# Monitor Redis
-podman exec -it stt-redis redis-cli info
-
-# Rebuild after changes
-podman-compose up --build -d
+# Remove container image
+podman rmi stt-service
 ```
 
 ### Option 2: Native Installation

@@ -1,57 +1,15 @@
 version: '3.8'
 
 services:
-  # PostgreSQL database for analytics
-  postgres:
-    image: postgres:15-alpine
-    container_name: stt-postgres
-    environment:
-      POSTGRES_DB: speech_to_text
-      POSTGRES_USER: sttuser
-      POSTGRES_PASSWORD: sttpass123
-      POSTGRES_HOST_AUTH_METHOD: md5
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sttuser -d speech_to_text"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    restart: unless-stopped
-    networks:
-      - stt-network
-
-  # Redis for caching and session management
-  redis:
-    image: redis:7-alpine
-    container_name: stt-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    restart: unless-stopped
-    networks:
-      - stt-network
-
   # Main speech-to-text service
   stt-service:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: stt-service
+    user: "0:0"
     environment:
       - DISPLAY=${DISPLAY:-:0}
-      - DATABASE_URL=postgresql://sttuser:sttpass123@postgres:5432/speech_to_text
-      - REDIS_URL=redis://redis:6379/0
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     volumes:
       # X11 socket for GUI access (Linux)
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -59,40 +17,11 @@ services:
       - ./config.yaml:/app/config.yaml:ro
       - ./logs:/app/logs:rw
       - ./data:/app/data:rw
-      - stt_models:/app/models:rw
     ports:
       - "8080:8080"  # Web interface (future)
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     devices:
       - /dev/dri:/dev/dri  # GPU access
-    networks:
-      - stt-network
     restart: unless-stopped
     # For GUI applications
     security_opt:
       - seccomp:unconfined
-    # GPU support
-    runtime: nvidia
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-
-volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-  stt_models:
-    driver: local
-
-networks:
-  stt-network:
-    driver: bridge

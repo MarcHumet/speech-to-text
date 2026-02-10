@@ -3,6 +3,7 @@
 import time
 from typing import Optional
 import threading
+import numpy as np
 
 from .core.config import Config
 from .core.audio_capture import AudioCapture

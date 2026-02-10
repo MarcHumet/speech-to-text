@@ -1,5 +1,7 @@
-# Use Python 3.11 with CUDA support for GPU acceleration
-FROM nvidia/cuda:12.1-devel-ubuntu22.04
+# Production Dockerfile for Speech-to-Text Service
+# Uses Python 3.11-slim for optimal compatibility with ML dependencies
+
+FROM python:3.11-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -8,65 +10,42 @@ ENV PYTHONPATH=/app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
-    python3-dev \
-    portaudio19-dev \
-    libasound2-dev \
-    libx11-dev \
-    libxext-dev \
-    libxtst-dev \
-    libxss-dev \
-    python3-tk \
-    ffmpeg \
     build-essential \
+    python3-dev \
+    libasound2-dev \
+    portaudio19-dev \
+    libpulse-dev \
+    pulseaudio \
     pkg-config \
-    libjack-jackd2-dev \
     curl \
-    git \
+    libxext-dev \
+    libx11-dev \
+    libxtst-dev \
+    libxkbcommon-dev \
+    xdotool \
+    xclip \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
-# Install uv (fast Python package manager)
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.cargo/bin:$PATH"
 
 # Create app directory
 WORKDIR /app
 
-# Create non-root user for security
-RUN useradd -m -u 1000 sttuser && \
-    chown -R sttuser:sttuser /app
-USER sttuser
-
 # Copy requirements first (for better caching)
-COPY --chown=sttuser:sttuser requirements.txt .
-COPY --chown=sttuser:sttuser pyproject.toml .
+COPY requirements.txt .
 
-# Create virtual environment and install dependencies
-RUN /root/.cargo/bin/uv venv && \
-    . .venv/bin/activate && \
-    /root/.cargo/bin/uv pip install -r requirements.txt
+# Install Python dependencies globally
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY --chown=sttuser:sttuser . .
-
-# Install the application
-RUN . .venv/bin/activate && \
-    /root/.cargo/bin/uv pip install -e .
+COPY stt_service ./stt_service
+COPY cli.py config.yaml pyproject.toml ./
 
 # Create directories for logs and data
 RUN mkdir -p /app/logs /app/data /app/models
 
-# Set proper permissions
-RUN chmod +x /app/cli.py
-
-# Expose port for potential web interface
-EXPOSE 8080
-
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD . .venv/bin/activate && python -c "import stt_service; print('OK')" || exit 1
+  CMD python -c "import stt_service.core.engine; print('OK')" || exit 1
 
 # Default command
-CMD ["/bin/bash", "-c", "source .venv/bin/activate && python cli.py run"]
+CMD ["python", "cli.py", "run"]

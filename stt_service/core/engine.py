@@ -289,9 +289,6 @@ class FasterWhisperEngine(STTEngine):
         Returns:
             Transcribed text
         """
-        # Ensure model is loaded (supports lazy loading)
-        self._ensure_model_loaded()
-        
         if not self.ready or self.model is None:
             raise RuntimeError("Faster Whisper model not loaded")
         
