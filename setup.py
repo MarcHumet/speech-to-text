@@ -16,6 +16,13 @@ setup(
     packages=find_packages(),
     python_requires='>=3.8',
     install_requires=requirements,
+    extras_require={
+        'test': [
+            'pytest>=6.0',
+            'pytest-cov>=2.0',
+            'mock>=4.0',
+        ],
+    },
     entry_points={
         'console_scripts': [
             'stt-service=cli:main',

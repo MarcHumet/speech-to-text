@@ -7,7 +7,11 @@ all dependencies to be installed.
 """
 
 import sys
+import os
 import logging
+
+# Add parent directory to path to import stt_service
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
