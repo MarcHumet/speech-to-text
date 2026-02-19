@@ -9,11 +9,12 @@ This service allows you to dictate text instead of typing by pressing a configur
 ## Features
 
 - 🎤 **Hotkey-triggered recording**: Press a customizable hotkey to start/stop recording
-- 🌍 **Multi-language support**: English, Spanish, and Catalan
+- 🌍 **Multi-language support**: English, Spanish, and Catalan (with specialized ProjecteAINA model)
 - ⌨️ **Flexible output**: Type text directly or copy to clipboard
 - 🔌 **Modular architecture**: Easy to extend with new models and features
 - 🐧 **Linux-native**: Designed specifically for Pop!_OS and Ubuntu-based systems
 - 🔧 **Model-agnostic**: Plug in your own STT models (Whisper, Vosk, custom)
+- 🇪🇸 **Catalan excellence**: Automatic selection of ProjecteAINA's optimized Catalan model
 
 ## Architecture
 
@@ -144,6 +145,8 @@ uv add faster-whisper
 # Verify GPU is detected
 nvidia-smi
 ```
+
+**Note for Catalan users:** When using `language: ca`, the service automatically downloads and uses the ProjecteAINA Catalan model on first run. No additional installation needed!
 
 #### Option 2: CPU-Only Whisper
 For systems without NVIDIA GPU:
@@ -313,6 +316,39 @@ audio:
 | `dummy` | Testing | N/A | Very Low | Instant |
 | `whisper` | CPU-only systems | No | High | Slow |
 | `faster-whisper` | NVIDIA GPUs | Yes | Low (uses VRAM) | Very Fast |
+
+### Language-Specific Models
+
+#### Catalan (ca) - ProjecteAINA Model
+
+When you set `language: ca` in your configuration, the service automatically uses the **ProjecteAINA Catalan model** (`projecte-aina/faster-whisper-large-v3-ca-3catparla`), which is specifically trained on Catalan speech data including the 3Cat Parla dataset.
+
+**Benefits:**
+- 🎯 **Superior accuracy** for Catalan speech compared to standard Whisper models
+- 🧠 **Memory efficient** using INT8 quantization (int8_float16 compute type)
+- ⚡ **Optimized for GPU** with faster-whisper backend
+- 📚 **Trained on Catalan data** including news, conversations, and regional variants
+
+**Configuration:**
+```yaml
+service:
+  language: ca  # Automatically uses ProjecteAINA Catalan model
+
+model:
+  type: faster-whisper
+  path: tiny  # Ignored for Catalan - uses ProjecteAINA model instead
+```
+
+**Command-line usage:**
+```bash
+# Run with Catalan model (GPU)
+uv run python cli.py run -l ca
+
+# Catalan transcription to clipboard
+uv run python cli.py run -l ca -o clipboard
+```
+
+**Note:** The ProjecteAINA model is larger than standard models (large-v3 based). First run will download the model (~3GB). Requires CUDA GPU for optimal performance.
 
 ### Configuration Priority
 

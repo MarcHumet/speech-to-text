@@ -181,7 +181,7 @@ class WhisperEngine(STTEngine):
             logger.info(f"Audio data: shape={audio.shape}, dtype={audio.dtype}, duration={len(audio)/16000:.2f}s")
             
             # Safety check: limit audio length to prevent memory issues
-            max_samples = 16000 * 10  # 10 seconds max
+            max_samples = 16000 * 40  # 40 seconds max
             if len(audio) > max_samples:
                 logger.warning(f"Audio too long ({len(audio)} samples), truncating to 10 seconds")
                 audio = audio[:max_samples]
@@ -233,12 +233,13 @@ class WhisperEngine(STTEngine):
 class FasterWhisperEngine(STTEngine):
     """Faster Whisper STT engine with GPU support (uses ctranslate2)."""
     
-    def __init__(self):
+    def __init__(self, language: Optional[str] = None):
         self.model = None
         self.ready = False
         self.model_path = None
         self.device = None
         self.compute_type = None
+        self.language = language
         logger.info("Initialized Faster Whisper STT Engine (GPU-optimized)")
     
     def load_model(self, model_path: str) -> None:
@@ -250,7 +251,13 @@ class FasterWhisperEngine(STTEngine):
         try:
             from faster_whisper import WhisperModel
             
-            logger.info(f"Loading Faster Whisper model: {model_path}")
+            # Use ProjecteAINA Catalan model if language is Catalan
+            if self.language == 'ca':
+                # Override model_path with Catalan-specific model
+                model_path = "projecte-aina/faster-whisper-large-v3-ca-3catparla"
+                logger.info(f"Detected Catalan language, using ProjecteAINA model: {model_path}")
+            else:
+                logger.info(f"Loading Faster Whisper model: {model_path}")
             
             # Store model configuration for lazy loading
             self.model_path = model_path
@@ -259,7 +266,13 @@ class FasterWhisperEngine(STTEngine):
             try:
                 # Use GPU with CUDA
                 self.device = "cuda"
-                self.compute_type = "float16"
+                # Use int8_float16 for Catalan model to save memory (as per ProjecteAINA recommendation)
+                if self.language == 'ca':
+                    self.compute_type = "int8_float16"
+                    logger.info("Using int8_float16 compute type for memory efficiency")
+                else:
+                    self.compute_type = "float16"
+                
                 self.model = WhisperModel(model_path, device=self.device, compute_type=self.compute_type)
                 logger.info("✅ Faster Whisper model loaded on GPU with CUDA!")
             except Exception as gpu_error:
@@ -383,18 +396,19 @@ class FasterWhisperEngine(STTEngine):
         return self.ready
 
 
-def create_engine(engine_type: str = 'faster-whisper', model_path: str = '') -> STTEngine:
+def create_engine(engine_type: str = 'faster-whisper', model_path: str = '', language: Optional[str] = None) -> STTEngine:
     """Factory function to create STT engines.
     
     Args:
         engine_type: Type of engine ('faster-whisper', 'whisper', 'dummy')
         model_path: Path to model files
+        language: Language code ('en', 'es', 'ca') - used to select specialized models
         
     Returns:
         Initialized STT engine
     """
     if engine_type.lower() == 'faster-whisper':
-        engine = FasterWhisperEngine()
+        engine = FasterWhisperEngine(language=language)
     elif engine_type.lower() == 'whisper':
         engine = WhisperEngine()
     elif engine_type.lower() == 'dummy':
@@ -402,7 +416,7 @@ def create_engine(engine_type: str = 'faster-whisper', model_path: str = '') -> 
     else:
         # Default to faster-whisper for unknown types (avoid dummy)
         logger.warning(f"Unknown engine type '{engine_type}', defaulting to faster-whisper")
-        engine = FasterWhisperEngine()
+        engine = FasterWhisperEngine(language=language)
     
     if model_path:
         engine.load_model(model_path)

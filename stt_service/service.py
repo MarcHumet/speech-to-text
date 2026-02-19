@@ -67,8 +67,9 @@ class STTService:
             # STT Engine
             engine_type = self.config.get('model.type', 'dummy')
             model_path = self.config.get('model.path', '')
-            logger.info(f"🤖 Initializing STT engine: {engine_type}")
-            self.engine = create_engine(engine_type, model_path)
+            language = self.config.get('service.language', 'en')
+            logger.info(f"🤖 Initializing STT engine: {engine_type} (language: {language})")
+            self.engine = create_engine(engine_type, model_path, language=language)
             
             # Input handler
             logger.info("⌨️ Initializing input handler...")

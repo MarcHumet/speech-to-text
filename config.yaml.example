@@ -3,6 +3,7 @@
 # Service settings
 service:
   # Language for transcription: 'en' (English), 'es' (Spanish), 'ca' (Catalan)
+  # Note: Catalan automatically uses ProjecteAINA's optimized model
   language: en
   # Audio input device (use 'default' for system default)
   audio_device: default
@@ -23,11 +24,12 @@ output:
 
 # Model configuration
 model:
-  # STT model type: 'dummy' (for testing), 'whisper' (OpenAI Whisper)
+  # STT model type: 'dummy' (for testing), 'whisper' (OpenAI Whisper), 'faster-whisper' (GPU-optimized)
   type: dummy
   # Model path or name
-  # For Whisper: 'tiny', 'base', 'small', 'medium', 'large'
+  # For Whisper/faster-whisper: 'tiny', 'base', 'small', 'medium', 'large'
   # For custom models: path to model directory
+  # Note: When language='ca', automatically uses 'projecte-aina/faster-whisper-large-v3-ca-3catparla'
   path: base
 
 # Audio capture settings
